@@ -1,0 +1,27 @@
+[
+  {
+    "id": "CLM-1001",
+    "label": "Clean approve, inside warranty",
+    "text": "Hi warranty team, Coast Valley Motors D-4471 here. Customer brought in a 2024 vehicle, VIN 5XYZK3DA1RG110045, 18,400 miles, 14 months in service. Infotainment head unit P-88142 went completely dark, no reboot. Customer is calm about it, just wants it fixed. We are requesting 1595.00 to cover parts and labour. Thanks, Marcy."
+  },
+  {
+    "id": "CLM-1002",
+    "label": "Goodwill edge case plus pressure tactics",
+    "text": "Northgate D-8830. 2021 unit, VIN 5XYZK3DA1RG998712, odometer 64900, 63 months in service. Transmission control module P-55901 failed, vehicle will not shift out of second. Customer is extremely frustrated and says his attorney will be in touch if we do not cover this. Asking 1550.00. Please advise urgently. Dev."
+  },
+  {
+    "id": "CLM-1003",
+    "label": "Wear item, should be denied",
+    "text": "Riverbend Auto Group D-1192. VIN 5XYZK3DA1RG441200, 29000 miles, 22 months in service. Cabin air filter P-10044 is filthy and the customer says the car smells. Replaced it. Requesting 70.00. Thanks."
+  },
+  {
+    "id": "CLM-1004",
+    "label": "Unknown part, must escalate",
+    "text": "Coast Valley D-4471. VIN 5XYZK3DA1RG556610, 31200 miles, 28 months. Part P-99999 failed, it is the auxiliary coolant pump on this trim. Not sure it is in your catalogue yet. Requesting 480.00. Marcy."
+  },
+  {
+    "id": "CLM-1005",
+    "label": "Messy, missing fields",
+    "text": "hey quick one - tailgate struts both gone on the silver one from last week, customer is annoyed. think its about 30k miles. can we get this covered? -D-1192"
+  }
+]

@@ -1,0 +1,171 @@
+"""
+The UI. Run with:  streamlit run app.py
+
+WHAT THIS IS ACTUALLY DOING
+---------------------------
+Nothing clever. It consumes the exact same graph.stream() feed that
+run_cli.py prints, and renders each event as a row instead of a print.
+
+That is the point worth internalising. The observability of a multi-agent
+system is not a UI feature bolted on at the end. It is a property of the
+state design. Because every node appends to `events`, any surface can render
+progress without the graph knowing anything about who is watching.
+
+If you had not put an append-reducer on `events` in state.py, this file would
+be impossible to write without threading callbacks through every agent.
+
+STREAMLIT'S ONE GOTCHA
+----------------------
+Streamlit reruns this whole script top to bottom on every interaction. So
+anything that must survive a click goes in st.session_state, and anything
+expensive to build goes behind @st.cache_resource.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import uuid
+
+import streamlit as st
+from langgraph.types import Command
+
+from src.config import DATA_DIR, RECURSION_LIMIT, STATE_DIR
+from src.graph import build_graph, make_checkpointer
+
+AGENTS = ["intake", "supervisor", "policy", "cost", "adjudicator", "reviewer", "human"]
+
+st.set_page_config(page_title="Goodwill desk", layout="wide")
+
+
+@st.cache_resource
+def get_graph():
+    os.makedirs(STATE_DIR, exist_ok=True)
+    return build_graph(make_checkpointer())
+
+
+@st.cache_data
+def get_claims():
+    with open(os.path.join(DATA_DIR, "claims.json")) as f:
+        return json.load(f)
+
+
+ss = st.session_state
+ss.setdefault("events", [])
+ss.setdefault("interrupt", None)
+ss.setdefault("config", None)
+ss.setdefault("running", False)
+
+graph = get_graph()
+claims = get_claims()
+
+
+def drain(stream) -> None:
+    """Pull the stream and push every event into session state."""
+    for chunk in stream:
+        if "__interrupt__" in chunk:
+            ss.interrupt = chunk["__interrupt__"][0].value
+        for node, update in chunk.items():
+            if node == "__interrupt__":
+                continue
+            for ev in (update or {}).get("events", []):
+                ss.events.append(ev)
+
+
+# --- Sidebar ---------------------------------------------------------------
+with st.sidebar:
+    st.subheader("Claim")
+    choice = st.selectbox(
+        "Sample", claims, format_func=lambda c: f"{c['id']} {c['label']}"
+    )
+    st.caption(choice["text"][:260] + "...")
+
+    if st.button("Run desk", type="primary", use_container_width=True):
+        ss.events = []
+        ss.interrupt = None
+        ss.config = {
+            "configurable": {"thread_id": f"{choice['id']}-{uuid.uuid4().hex[:6]}"},
+            "recursion_limit": RECURSION_LIMIT,
+        }
+        drain(
+            graph.stream(
+                {"raw_claim": choice["text"]}, ss.config, stream_mode="updates"
+            )
+        )
+
+    if ss.config:
+        st.caption(f"thread: {ss.config['configurable']['thread_id']}")
+
+    total = sum(e["cost_usd"] for e in ss.events)
+    tin = sum(e["tokens_in"] for e in ss.events)
+    tout = sum(e["tokens_out"] for e in ss.events)
+    st.metric("Run cost", f"${total:.4f}")
+    st.caption(f"{tin:,} in / {tout:,} out tokens")
+
+# --- Agent roster ----------------------------------------------------------
+left, right = st.columns([1, 2])
+
+with left:
+    st.subheader("Agents")
+    seen = {e["agent"] for e in ss.events}
+    last = ss.events[-1]["agent"] if ss.events else None
+    for a in AGENTS:
+        spend = sum(e["cost_usd"] for e in ss.events if e["agent"] == a)
+        if a == "human" and ss.interrupt:
+            mark, note = "WAITING", "needs you"
+        elif a == last and ss.interrupt is None:
+            mark, note = "DONE", f"${spend:.4f}"
+        elif a in seen:
+            mark, note = "DONE", f"${spend:.4f}"
+        else:
+            mark, note = "IDLE", ""
+        st.write(f"**{a}** · {mark} {note}")
+
+# --- Activity feed ---------------------------------------------------------
+with right:
+    st.subheader("Activity")
+    if not ss.events:
+        st.info("Pick a claim and press Run desk.")
+    for e in ss.events:
+        cost = f" · ${e['cost_usd']:.4f}" if e["cost_usd"] else ""
+        st.write(f"`{e['agent']}`  {e['detail']}{cost}")
+
+# --- Human gate ------------------------------------------------------------
+if ss.interrupt:
+    st.divider()
+    st.subheader("Approval needed")
+    st.warning(ss.interrupt["reason"])
+
+    c1, c2 = st.columns(2)
+    with c1:
+        st.json(ss.interrupt["decision"])
+    with c2:
+        st.json(ss.interrupt["cost"])
+
+    verdict = st.radio("Your decision", ["approve", "reject", "edit"], horizontal=True)
+    note = st.text_input("Note for the audit trail")
+    payload = {"verdict": verdict, "note": note}
+
+    if verdict == "edit":
+        payload["payout"] = st.number_input(
+            "Revised payout",
+            value=float(ss.interrupt["decision"]["payout"]),
+            step=50.0,
+        )
+        payload["outcome"] = st.selectbox("Revised outcome", ["approve", "partial", "deny"])
+
+    if st.button("Submit decision", type="primary"):
+        # WHY this works after a page reload: the graph state lives in the
+        # sqlite checkpointer, keyed by thread_id. Streamlit has forgotten
+        # everything, the graph has not.
+        ss.interrupt = None
+        drain(graph.stream(Command(resume=payload), ss.config, stream_mode="updates"))
+        st.rerun()
+
+# --- Final -----------------------------------------------------------------
+if ss.config and not ss.interrupt and ss.events:
+    final = graph.get_state(ss.config).values
+    if final.get("decision") and not graph.get_state(ss.config).next:
+        st.divider()
+        st.subheader("Final decision")
+        st.json(final["decision"])

@@ -1,0 +1,7 @@
+{
+  "P-88142": {"description": "Infotainment head unit", "price": 1240.00, "labor_hours": 2.5, "known": true},
+  "P-20317": {"description": "Front wheel bearing assembly", "price": 186.50, "labor_hours": 1.8, "known": true},
+  "P-55901": {"description": "Transmission control module", "price": 980.00, "labor_hours": 4.0, "known": true},
+  "P-10044": {"description": "Cabin air filter", "price": 28.00, "labor_hours": 0.3, "known": true},
+  "P-73220": {"description": "Rear tailgate strut, pair", "price": 112.00, "labor_hours": 0.9, "known": true}
+}
